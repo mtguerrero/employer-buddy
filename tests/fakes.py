@@ -13,8 +13,7 @@ def sample_profile() -> ProfileData:
             start="2021-03",
             end="",
             current=True,
-            summary="Reportes de ventas",
-            achievements=["Automaticé 12 reportes semanales"],
+            highlights=["Automaticé 12 reportes semanales"],
         )
     ]
     profile.skills = ["SQL", "Power BI"]

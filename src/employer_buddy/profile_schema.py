@@ -18,8 +18,12 @@ class Experience(BaseModel):
     start: str = Field(description=f"Fecha de inicio. {DATE_HINT}")
     end: str = Field(description=f"Fecha de fin. {DATE_HINT} vacío si es el trabajo actual.")
     current: bool = Field(description="true si es el trabajo actual")
-    summary: str = Field(description="Responsabilidades principales, tal como aparecen")
-    achievements: list[str] = Field(description="Logros concretos, conservando las cifras")
+    highlights: list[str] = Field(
+        description=(
+            "Viñetas de esta experiencia tal como aparecen en el material, en el mismo orden. "
+            "Solo se corrigen errores de ortografía; no se resumen, reescriben ni reparten."
+        )
+    )
 
 
 class Education(BaseModel):

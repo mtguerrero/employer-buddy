@@ -15,7 +15,8 @@ RULES = """Eres el asistente que construye el perfil maestro de una persona que 
 El perfil maestro es la fuente de verdad para escribir hojas de vida después, así que:
 - Registra solo hechos que aparezcan en el material o que la persona haya dicho. Nunca inventes
   cargos, fechas, cifras, habilidades ni estudios. Si un dato no aparece, déjalo vacío.
-- Conserva las cifras de los logros tal como están.
+- Copia las viñetas de cada experiencia tal como están, en el mismo orden. Solo corrige errores
+  de ortografía (tildes, letras faltantes). No las resumas, no las reescribas, no las dividas.
 - Normaliza las fechas a AAAA-MM o AAAA.
 - Estado de estudios y cursos: usa el que diga el material. Si no lo dice, un estudio con fecha
   de fin ya pasada está "Finalizado" y uno que dice "Presente" o "Actualidad" está "En curso".
@@ -178,7 +179,10 @@ class ClaudeProfileAI:
             "Perfil actual:\n"
             + json.dumps(current.model_dump(), ensure_ascii=False)
             + f"\n\nLe preguntaste: {question}\nRespondió: {answer}\n\n"
-            "Actualiza el perfil solo con lo que dice la respuesta. Si la respuesta no contesta "
+            "Actualiza el perfil solo con lo que dice la respuesta. Si la respuesta trae una cifra "
+            "o un resultado de una experiencia, agrégalo a la viñeta a la que corresponde, "
+            "cambiando lo menos posible el resto de la frase; si no corresponde a ninguna, "
+            "agrégalo como viñeta nueva de esa experiencia. Si la respuesta no contesta "
             "la pregunta, deja la pregunta en la lista. Devuelve las preguntas que siguen "
             "pendientes, sin repetir las ya contestadas."
         )
