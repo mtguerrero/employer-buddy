@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # Números autorizados, separados por comas, en formato internacional sin "+".
     allowed_numbers: str = ""
 
+    # Claude API
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-opus-5-5"
+    anthropic_effort: str = "medium"
+
     worker_poll_seconds: float = 1.0
 
     @property

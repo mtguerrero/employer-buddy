@@ -6,8 +6,15 @@ Tú revisas el resultado y postulas.
 
 ## Estado
 
-Primera etapa: el webhook de WhatsApp recibe mensajes, los guarda y los encola; el worker
-responde. Solo atiende a los números de `ALLOWED_NUMBERS`.
+Fase A (configuración del perfil) en construcción:
+
+- El webhook de WhatsApp recibe mensajes, los guarda y los encola. Solo atiende a los números
+  de `ALLOWED_NUMBERS`; los demás se ignoran sin guardar nada.
+- Si envías tu HV (PDF, Word o foto) o escribes tu trayectoria, Claude la convierte en el
+  **perfil maestro** (solo hechos) y el bot te pregunta, una por una, por los datos que faltan.
+- Cada respuesta actualiza el perfil. Se registran los tokens usados por persona.
+
+Pendiente: página de revisión del perfil, plantilla de estilo, y la fase B (vacantes).
 
 ## Cómo funciona
 
@@ -15,7 +22,9 @@ responde. Solo atiende a los números de `ALLOWED_NUMBERS`.
   mensaje y encola un trabajo. Responde de inmediato, porque Meta reintenta si tarda.
 - **Worker** (`employer_buddy.worker`): toma trabajos de la cola (tabla `jobs` en PostgreSQL) y
   hace la parte lenta. Reintenta con espera creciente hasta 5 veces.
-- **PostgreSQL**: usuarios, mensajes y cola. Todas las tablas con datos personales llevan
+- **Claude** (`employer_buddy.ai`): extrae el perfil con salida JSON validada contra
+  `profile_schema.py`. Si el modelo declina, usa el respaldo automático del servidor.
+- **PostgreSQL**: usuarios, mensajes, cola, archivos recibidos, perfil y consumo de tokens. Todas las tablas con datos personales llevan
   `user_id`, para poder abrir el servicio a más personas sin migrar datos.
 
 ## Desarrollo
@@ -43,4 +52,4 @@ uv run pytest
 uv run ruff check . && uv run ruff format --check .
 ```
 
-Las pruebas usan la base `employer_buddy_test` y simulan la API de WhatsApp; no necesitan claves.
+Las pruebas usan la base `employer_buddy_test` y simulan WhatsApp y Claude; no necesitan claves.

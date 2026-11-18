@@ -42,6 +42,16 @@ def parse_inbound(payload: dict[str, Any]) -> list[InboundMessage]:
     return messages
 
 
+@dataclass(frozen=True)
+class Media:
+    content: bytes
+    mime_type: str
+
+
+def _api(settings: Settings, path: str) -> str:
+    return f"{settings.whatsapp_api_base}/{settings.whatsapp_api_version}/{path}"
+
+
 class WhatsAppClient:
     def __init__(self, settings: Settings, http: httpx.Client | None = None) -> None:
         self._settings = settings
@@ -65,3 +75,13 @@ class WhatsAppClient:
         )
         response.raise_for_status()
         return response.json()["messages"][0]["id"]
+
+    def download_media(self, media_id: str) -> Media:
+        """Descarga un archivo que el usuario envió (documento o imagen)."""
+        auth = {"Authorization": f"Bearer {self._settings.whatsapp_token}"}
+        meta = self._http.get(_api(self._settings, media_id), headers=auth)
+        meta.raise_for_status()
+        info = meta.json()
+        file = self._http.get(info["url"], headers=auth)
+        file.raise_for_status()
+        return Media(content=file.content, mime_type=info.get("mime_type", ""))
