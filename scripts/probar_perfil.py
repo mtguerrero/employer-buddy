@@ -22,7 +22,8 @@ def main() -> None:
     path = Path(sys.argv[1]).expanduser()
     if not path.is_file():
         sys.exit(
-            f"No encontré el archivo: {path}\nTip: arrastra el archivo a la terminal para pegar su ruta."
+            f"No encontré el archivo: {path}\n"
+            "Tip: arrastra el archivo a la terminal para pegar su ruta."
         )
     mime = DOCX if path.suffix.lower() == ".docx" else mimetypes.guess_type(path.name)[0] or ""
     source = to_source(path.read_bytes(), mime)
