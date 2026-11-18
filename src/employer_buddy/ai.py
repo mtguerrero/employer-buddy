@@ -3,12 +3,13 @@
 import base64
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Protocol
 
 import anthropic
 
 from employer_buddy.config import Settings
-from employer_buddy.profile_schema import ProfileData, ProfileUpdate
+from employer_buddy.profile_schema import ProfileData, ProfileUpdate, fill_education_status
 
 RULES = """Eres el asistente que construye el perfil maestro de una persona que busca empleo.
 El perfil maestro es la fuente de verdad para escribir hojas de vida después, así que:
@@ -16,11 +17,21 @@ El perfil maestro es la fuente de verdad para escribir hojas de vida después, a
   cargos, fechas, cifras, habilidades ni estudios. Si un dato no aparece, déjalo vacío.
 - Conserva las cifras de los logros tal como están.
 - Normaliza las fechas a AAAA-MM o AAAA.
+- Estado de estudios y cursos: usa el que diga el material. Si no lo dice, un estudio con fecha
+  de fin ya pasada está "Finalizado" y uno que dice "Presente" o "Actualidad" está "En curso".
 - Escribe los textos en español. Los nombres propios, cargos y tecnologías se dejan como aparecen.
-- Las preguntas sirven para completar lo que falta y para que la hoja de vida sea mejor:
-  fechas que faltan, logros sin resultados medibles, y las preferencias de búsqueda (cargos que
-  busca, ciudad o modalidad, aspiración salarial). Pregunta solo lo que de verdad falta,
-  en tono cercano, una idea por pregunta, máximo 5."""
+
+Preguntas para completar el perfil: máximo 7, en tono cercano, tuteando, una idea por pregunta,
+solo sobre lo que de verdad falta, en este orden:
+1. Preferencias de búsqueda en UNA sola pregunta: cargos que busca, ciudad o país, modalidad
+   (presencial, híbrida o remota) y aspiración salarial.
+2. Logros sin resultados medibles: una pregunta por experiencia, empezando por la más reciente,
+   pidiendo cifras concretas de esa experiencia (personas, áreas, horas, porcentajes, dinero,
+   volumen). Nombra la empresa y lo que hizo. Máximo 3 preguntas de este tipo.
+3. Idiomas sin nivel.
+4. Experiencias con fechas que se cruzan: pregunta si alguna fue por horas, independiente o en
+   paralelo.
+5. Fechas que faltan, y enlaces (LinkedIn o portafolio) si no hay ninguno."""
 
 
 class AIRefusalError(Exception):
@@ -82,6 +93,7 @@ def _strip_fences(text: str) -> str:
 
 
 def _result(response: Any, update: ProfileUpdate) -> AIResult:
+    update.profile = fill_education_status(update.profile, date.today())
     return AIResult(
         update=update,
         model=response.model,

@@ -4,6 +4,8 @@ Los datos que faltan se guardan como texto vacío en lugar de null: cada campo o
 multiplica el tamaño de la gramática de salida estructurada y la API la rechaza si crece demasiado.
 """
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 DATE_HINT = "Formato AAAA-MM, o AAAA si solo aparece el año. Vacío si no aparece."
@@ -68,7 +70,7 @@ class ProfileUpdate(BaseModel):
     questions: list[str] = Field(
         description=(
             "Preguntas pendientes para el usuario, en español, tuteando, una idea por "
-            "pregunta, de la más importante a la menos importante. Máximo 5."
+            "pregunta, en el orden indicado en las instrucciones. Máximo 7."
         )
     )
 
@@ -91,3 +93,29 @@ def empty_profile() -> ProfileData:
             target_roles=[], locations=[], work_modes=[], salary_expectation=""
         ),
     )
+
+
+def _end_of_period(value: str) -> date | None:
+    """Último día aproximado de una fecha AAAA-MM o AAAA. None si no se puede leer."""
+    parts = value.strip().split("-")
+    try:
+        year = int(parts[0])
+        month = int(parts[1]) if len(parts) > 1 else 12
+        return date(year, month, 28)
+    except (ValueError, IndexError):
+        return None
+
+
+def fill_education_status(profile: ProfileData, today: date) -> ProfileData:
+    """Marca como "Finalizado" los estudios sin estado cuya fecha de fin ya pasó.
+
+    Se hace en código, y no solo en las instrucciones, para que el resultado no dependa de
+    cómo interprete el modelo cada hoja de vida.
+    """
+    for item in profile.education:
+        if item.status.strip() or not item.end.strip():
+            continue
+        end = _end_of_period(item.end)
+        if end is not None and end < today:
+            item.status = "Finalizado"
+    return profile
