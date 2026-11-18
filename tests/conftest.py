@@ -32,7 +32,7 @@ def _clean_db():
     with get_engine().begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE llm_usage, profiles, files, jobs, messages, users "
+                "TRUNCATE review_tokens, llm_usage, profiles, files, jobs, messages, users "
                 "RESTART IDENTITY CASCADE"
             )
         )

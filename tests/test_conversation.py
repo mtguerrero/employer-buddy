@@ -44,7 +44,7 @@ def outgoing(session) -> list[str]:
 
 
 def run(session, settings, ai):
-    assert process_one(session, Deps(whatsapp=WhatsAppClient(settings), ai=ai))
+    assert process_one(session, Deps(whatsapp=WhatsAppClient(settings), ai=ai, settings=settings))
 
 
 def test_saludo_si_no_hay_perfil(client, session, settings, wa_send):
@@ -95,7 +95,7 @@ def test_pdf_por_whatsapp(client, session, settings, wa_send):
     assert stored.content == PDF_BYTES and stored.filename == "hv.pdf"
     replies = outgoing(session)
     assert replies[0] == conv.READING
-    assert replies[-1] == conv.PROFILE_COMPLETE
+    assert "http://localhost:8000/perfil?t=" in replies[-1]
 
 
 def test_formato_no_soportado(client, session, settings, wa_send):

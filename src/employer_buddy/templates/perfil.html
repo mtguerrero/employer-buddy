@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tu perfil · Employer Buddy</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --fg: #1c2430; --muted: #5d6878; --line: #d9dee5;
+    --accent: #2457c5; --accent-soft: #e8eefb; --ok: #23784a; --ok-soft: #e4f3ea;
+    --warn: #9a5b08; --warn-soft: #fbf0dc; --danger: #b0372a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --card: #1a2029; --fg: #e5e9ef; --muted: #9aa5b5; --line: #2e3744;
+      --accent: #85a8f0; --accent-soft: #1c2840; --ok: #6cc28a; --ok-soft: #1a2d21;
+      --warn: #e2b46a; --warn-soft: #2e2617; --danger: #f08a75;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 120px; display: grid; gap: 20px; }
+  h1 { font-size: 26px; margin: 0; }
+  h2 { font-size: 18px; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px; display: grid; gap: 14px; }
+  .sec-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+  label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 14px; }
+  input[type=text], textarea, select { width: 100%; font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .item { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+  .item-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .item-title { font-weight: 600; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+  button { font: inherit; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+  button.link { border: 0; background: none; color: var(--accent); padding: 4px 6px; }
+  button.danger { color: var(--danger); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { button.primary { color: #0d1420; } }
+  .notice { border-radius: 10px; padding: 12px 14px; background: var(--warn-soft); color: var(--warn); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  .notice ul { margin: 6px 0 0; padding-left: 20px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+    padding: 12px 16px; }
+  .bar-inner { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .status { color: var(--muted); font-size: 14px; flex: 1; min-width: 160px; }
+  .status.error { color: var(--danger); }
+  @media (max-width: 560px) {
+    .status { flex-basis: 100%; }
+    .bar-inner button { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:6px">
+    <h1>Tu perfil maestro</h1>
+    <p class="lede">Es la base para todas las hojas de vida que prepare para ti. Revisa que todo sea cierto, corrige lo que haga falta y confírmalo.</p>
+  </header>
+  <div id="notices"></div>
+  <div id="form"></div>
+</main>
+<div class="bar"><div class="bar-inner">
+  <span id="status" class="status" role="status" aria-live="polite"></span>
+  <button type="button" id="save">Guardar cambios</button>
+  <button type="button" id="confirm" class="primary">Confirmar perfil</button>
+</div></div>
+
+<script id="profile-data" type="application/json">__PROFILE_JSON__</script>
+<script>
+(function () {
+  const initial = JSON.parse(document.getElementById("profile-data").textContent);
+  const state = initial.profile;
+  const form = document.getElementById("form");
+  const statusEl = document.getElementById("status");
+  let dirty = false;
+
+  const SECTIONS = [
+    { key: "experiences", title: "Experiencia", itemTitle: (x) => [x.role, x.company].filter(Boolean).join(" · ") || "Nueva experiencia",
+      empty: { role: "", company: "", location: "", start: "", end: "", current: false, highlights: [] },
+      fields: [["role", "Cargo"], ["company", "Empresa"], ["location", "Ciudad o país"], ["start", "Inicio (AAAA-MM)"],
+        ["end", "Fin (AAAA-MM)"], ["current", "Es mi trabajo actual", "check"],
+        ["highlights", "Viñetas (una por línea)", "lines"]] },
+    { key: "education", title: "Formación", itemTitle: (x) => x.degree || "Nuevo estudio",
+      empty: { degree: "", institution: "", start: "", end: "", status: "" },
+      fields: [["degree", "Título o programa"], ["institution", "Institución"], ["start", "Inicio"], ["end", "Fin"], ["status", "Estado"]] },
+    { key: "courses", title: "Cursos y certificaciones", itemTitle: (x) => x.name || "Nuevo curso",
+      empty: { name: "", issuer: "", year: "", status: "" },
+      fields: [["name", "Nombre"], ["issuer", "Entidad o plataforma"], ["year", "Año"], ["status", "Estado"]] },
+    { key: "languages", title: "Idiomas", itemTitle: (x) => x.language || "Nuevo idioma",
+      empty: { language: "", level: "" },
+      fields: [["language", "Idioma"], ["level", "Nivel (ej. B2)"]] },
+  ];
+
+  function el(tag, attrs, children) {
+    const node = document.createElement(tag);
+    Object.entries(attrs || {}).forEach(([k, v]) => {
+      if (k === "text") node.textContent = v;
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v);
+    });
+    (children || []).forEach((c) => node.appendChild(c));
+    return node;
+  }
+
+  function changed() { dirty = true; setStatus("Tienes cambios sin guardar."); }
+
+  function field(obj, key, label, kind, id) {
+    if (kind === "check") {
+      const input = el("input", { type: "checkbox", id });
+      input.checked = !!obj[key];
+      input.addEventListener("change", () => { obj[key] = input.checked; changed(); });
+      return el("label", { class: "check", for: id }, [input, document.createTextNode(label)]);
+    }
+    let input;
+    if (kind === "lines" || kind === "long") {
+      input = el("textarea", { id });
+      input.value = kind === "lines" ? (obj[key] || []).join("\n") : obj[key] || "";
+      input.addEventListener("input", () => {
+        obj[key] = kind === "lines" ? input.value.split("\n").map((s) => s.trim()).filter(Boolean) : input.value;
+        changed();
+      });
+    } else {
+      input = el("input", { type: "text", id });
+      input.value = obj[key] || "";
+      input.addEventListener("input", () => { obj[key] = input.value; changed(); });
+    }
+    const wrap = el("label", { for: id, text: label });
+    wrap.appendChild(input);
+    if (kind === "lines" || kind === "long") wrap.style.gridColumn = "1 / -1";
+    return wrap;
+  }
+
+  function personal() {
+    const p = state;
+    const box = el("section", {}, [el("h2", { text: "Datos personales" })]);
+    box.appendChild(el("div", { class: "grid" }, [
+      field(p, "full_name", "Nombre completo", "", "full_name"),
+      field(p, "headline", "Título profesional", "", "headline"),
+      field(p, "location", "Ciudad", "", "location"),
+      field(p, "email", "Correo", "", "email"),
+      field(p, "phone", "Teléfono", "", "phone"),
+      field(p, "links", "Enlaces: LinkedIn, portafolio (uno por línea)", "lines", "links"),
+      field(p, "summary", "Perfil profesional", "long", "summary"),
+    ]));
+    return box;
+  }
+
+  function listSection(spec) {
+    const items = state[spec.key];
+    const box = el("section", {});
+    box.appendChild(el("div", { class: "sec-head" }, [
+      el("h2", { text: spec.title }),
+      el("button", { type: "button", class: "link", text: "+ Agregar", onclick: () => {
+        items.push(JSON.parse(JSON.stringify(spec.empty))); changed(); render();
+      } }),
+    ]));
+    items.forEach((item, i) => {
+      const grid = el("div", { class: "grid" }, spec.fields.map(([k, label, kind]) =>
+        field(item, k, label, kind, `${spec.key}-${i}-${k}`)));
+      const actions = el("div", {}, [
+        el("button", { type: "button", class: "link", text: "Subir", "aria-label": "Subir", onclick: () => {
+          if (i > 0) { [items[i - 1], items[i]] = [items[i], items[i - 1]]; changed(); render(); }
+        } }),
+        el("button", { type: "button", class: "link danger", text: "Quitar", onclick: () => {
+          items.splice(i, 1); changed(); render();
+        } }),
+      ]);
+      box.appendChild(el("div", { class: "item" }, [
+        el("div", { class: "item-head" }, [el("span", { class: "item-title", text: spec.itemTitle(item) }), actions]),
+        grid,
+      ]));
+    });
+    if (!items.length) box.appendChild(el("p", { class: "hint", text: "Sin registros." }));
+    return box;
+  }
+
+  function skills() {
+    const box = el("section", {}, [el("h2", { text: "Habilidades" })]);
+    box.appendChild(field(state, "skills", "Una por línea", "lines", "skills"));
+    return box;
+  }
+
+  function preferences() {
+    const p = state.preferences;
+    const box = el("section", {}, [el("h2", { text: "Lo que buscas" })]);
+    const modes = ["Presencial", "Híbrido", "Remoto"].map((m, i) => {
+      const id = `mode-${i}`;
+      const input = el("input", { type: "checkbox", id });
+      input.checked = p.work_modes.some((x) => x.toLowerCase().startsWith(m.toLowerCase().slice(0, 5)));
+      input.addEventListener("change", () => {
+        p.work_modes = p.work_modes.filter((x) => !x.toLowerCase().startsWith(m.toLowerCase().slice(0, 5)));
+        if (input.checked) p.work_modes.push(m);
+        changed();
+      });
+      return el("label", { class: "check", for: id }, [input, document.createTextNode(m)]);
+    });
+    box.appendChild(el("div", { class: "grid" }, [
+      field(p, "target_roles", "Cargos que buscas (uno por línea)", "lines", "target_roles"),
+      field(p, "locations", "Ciudades o países (uno por línea)", "lines", "locations"),
+      el("div", { style: "display:grid;gap:6px" }, [el("span", { class: "hint", text: "Modalidad" }), ...modes]),
+      field(p, "salary_expectation", "Aspiración salarial", "", "salary"),
+    ]));
+    return box;
+  }
+
+  function notices() {
+    const box = document.getElementById("notices");
+    box.innerHTML = "";
+    if (initial.status === "confirmed") {
+      box.appendChild(el("div", { class: "notice ok", text: "Tu perfil está confirmado. Si cambias algo, vuelve a confirmarlo." }));
+    }
+    if (initial.pending_questions.length) {
+      const list = el("ul", {}, initial.pending_questions.map((q) => el("li", { text: q })));
+      box.appendChild(el("div", { class: "notice" }, [
+        el("strong", { text: "Datos que faltan. Puedes completarlos aquí o responderlos por WhatsApp:" }), list,
+      ]));
+    }
+  }
+
+  function render() {
+    const y = window.scrollY;
+    form.innerHTML = "";
+    form.style.display = "grid";
+    form.style.gap = "20px";
+    form.appendChild(personal());
+    form.appendChild(listSection(SECTIONS[0]));
+    form.appendChild(listSection(SECTIONS[1]));
+    form.appendChild(listSection(SECTIONS[2]));
+    form.appendChild(skills());
+    form.appendChild(listSection(SECTIONS[3]));
+    form.appendChild(preferences());
+    window.scrollTo(0, y);
+  }
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.className = "status" + (isError ? " error" : "");
+  }
+
+  async function send(confirm) {
+    setStatus(confirm ? "Confirmando…" : "Guardando…");
+    try {
+      const res = await fetch("/api/perfil", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile: state, confirm }),
+      });
+      if (res.status === 401) { setStatus("Tu sesión venció. Escribe «perfil» en WhatsApp para recibir un enlace nuevo.", true); return; }
+      if (!res.ok) { setStatus("No se pudo guardar. Revisa los datos e inténtalo de nuevo.", true); return; }
+      const body = await res.json();
+      dirty = false;
+      initial.status = body.status;
+      if (confirm) initial.pending_questions = [];
+      notices();
+      setStatus(confirm ? "Perfil confirmado. Te avisé por WhatsApp." : "Cambios guardados.");
+    } catch (e) {
+      setStatus("No hay conexión. Inténtalo de nuevo.", true);
+    }
+  }
+
+  document.getElementById("save").addEventListener("click", () => send(false));
+  document.getElementById("confirm").addEventListener("click", () => send(true));
+  window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+  notices();
+  render();
+})();
+</script>
+</body>
+</html>

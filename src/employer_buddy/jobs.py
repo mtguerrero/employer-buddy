@@ -57,7 +57,16 @@ def handle_message(session: Session, job: Job, deps: Deps) -> None:
     conversation.handle_message(session, user, deps, job.payload["wa_message_id"])
 
 
-HANDLERS: dict[str, Handler] = {"handle_message": handle_message}
+def profile_confirmed(session: Session, job: Job, deps: Deps) -> None:
+    user = session.get(User, job.user_id)
+    assert user is not None
+    conversation.handle_profile_confirmed(session, user, deps)
+
+
+HANDLERS: dict[str, Handler] = {
+    "handle_message": handle_message,
+    "profile_confirmed": profile_confirmed,
+}
 
 
 def run_job(session: Session, job: Job, deps: Deps) -> None:

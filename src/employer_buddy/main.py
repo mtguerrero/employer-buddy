@@ -11,11 +11,14 @@ from sqlalchemy.orm import Session
 from employer_buddy.config import Settings, get_settings
 from employer_buddy.db import get_session
 from employer_buddy.inbox import handle_inbound
+from employer_buddy.web import router as web_router
 from employer_buddy.whatsapp import parse_inbound, verify_signature
 
 log = logging.getLogger(__name__)
 
+get_settings().check()
 app = FastAPI(title="Asistente de postulaciones")
+app.include_router(web_router)
 
 
 @app.get("/health")
