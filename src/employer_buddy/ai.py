@@ -13,7 +13,7 @@ from employer_buddy.profile_schema import ProfileData, ProfileUpdate
 RULES = """Eres el asistente que construye el perfil maestro de una persona que busca empleo.
 El perfil maestro es la fuente de verdad para escribir hojas de vida después, así que:
 - Registra solo hechos que aparezcan en el material o que la persona haya dicho. Nunca inventes
-  cargos, fechas, cifras, habilidades ni estudios. Si un dato no aparece, déjalo en null o vacío.
+  cargos, fechas, cifras, habilidades ni estudios. Si un dato no aparece, déjalo vacío.
 - Conserva las cifras de los logros tal como están.
 - Normaliza las fechas a AAAA-MM o AAAA.
 - Escribe los textos en español. Los nombres propios, cargos y tecnologías se dejan como aparecen.
@@ -67,6 +67,30 @@ def _source_block(source: SourceDocument) -> dict[str, Any]:
     }
 
 
+def _check_refusal(response: Any) -> None:
+    if response.stop_reason == "refusal":
+        raise AIRefusalError(str(response.stop_details or response.stop_reason))
+
+
+def _strip_fences(text: str) -> str:
+    """Quita un bloque ```json ... ``` si el modelo lo agregó."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
+
+
+def _result(response: Any, update: ProfileUpdate) -> AIResult:
+    return AIResult(
+        update=update,
+        model=response.model,
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+        request_id=getattr(response, "_request_id", None),
+    )
+
+
 class ClaudeProfileAI:
     def __init__(self, settings: Settings, client: anthropic.Anthropic | None = None) -> None:
         self._settings = settings
@@ -77,25 +101,47 @@ class ClaudeProfileAI:
         self._client = client
 
     def _call(self, content: list[dict[str, Any]]) -> AIResult:
-        response = self._client.beta.messages.parse(
-            model=self._settings.anthropic_model,
-            max_tokens=16000,
-            system=RULES,
-            messages=[{"role": "user", "content": content}],
-            output_format=ProfileUpdate,
-            output_config={"effort": self._settings.anthropic_effort},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
+        common: dict[str, Any] = {
+            "model": self._settings.anthropic_model,
+            "max_tokens": 16000,
+            "system": RULES,
+            "output_config": {"effort": self._settings.anthropic_effort},
+            "betas": ["server-side-fallback-2026-07-01"],
+            "fallbacks": "default",
+        }
+        try:
+            response = self._client.beta.messages.parse(
+                messages=[{"role": "user", "content": content}],
+                output_format=ProfileUpdate,
+                **common,
+            )
+        except anthropic.BadRequestError as exc:
+            if "grammar" not in str(exc).lower():
+                raise
+            # La API no pudo compilar el esquema como salida estructurada: se pide el JSON
+            # por instrucciones y se valida aquí con el mismo modelo de datos.
+            return self._call_with_json_instructions(content, common)
+        _check_refusal(response)
+        if response.parsed_output is None:
+            raise AIRefusalError(str(response.stop_reason))
+        return _result(response, response.parsed_output)
+
+    def _call_with_json_instructions(
+        self, content: list[dict[str, Any]], common: dict[str, Any]
+    ) -> AIResult:
+        schema = json.dumps(ProfileUpdate.model_json_schema(), ensure_ascii=False)
+        instructions = {
+            "type": "text",
+            "text": "Responde solo con un objeto JSON válido, sin texto adicional ni bloques de "
+            f"código, que cumpla este esquema JSON:\n{schema}",
+        }
+        response = self._client.beta.messages.create(
+            messages=[{"role": "user", "content": [*content, instructions]}],
+            **common,
         )
-        if response.stop_reason == "refusal" or response.parsed_output is None:
-            raise AIRefusalError(str(response.stop_details or response.stop_reason))
-        return AIResult(
-            update=response.parsed_output,
-            model=response.model,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            request_id=getattr(response, "_request_id", None),
-        )
+        _check_refusal(response)
+        text = "".join(b.text for b in response.content if b.type == "text")
+        return _result(response, ProfileUpdate.model_validate_json(_strip_fences(text)))
 
     def extract(self, source: SourceDocument, current: ProfileData | None) -> AIResult:
         content: list[dict[str, Any]] = [_source_block(source)]

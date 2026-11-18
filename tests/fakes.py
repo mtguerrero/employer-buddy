@@ -11,7 +11,7 @@ def sample_profile() -> ProfileData:
             company="Empresa Ejemplo",
             location="Bogotá",
             start="2021-03",
-            end=None,
+            end="",
             current=True,
             summary="Reportes de ventas",
             achievements=["Automaticé 12 reportes semanales"],

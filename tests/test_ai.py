@@ -50,3 +50,41 @@ def test_rechazo_lanza_error(settings):
     stub = StubClient(response(None, stop_reason="refusal"))
     with pytest.raises(AIRefusalError):
         ClaudeProfileAI(settings, client=stub).apply_answer(sample_profile(), "¿?", "x")
+
+
+def test_si_el_esquema_es_muy_grande_pide_json_por_instrucciones(settings):
+    import anthropic
+    import httpx
+
+    update = ProfileUpdate(profile=sample_profile(), questions=["¿Nivel de inglés?"])
+    stub = StubClient(None)
+
+    def parse(**kwargs):
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        raise anthropic.BadRequestError(
+            "The compiled grammar is too large",
+            response=httpx.Response(400, request=request),
+            body=None,
+        )
+
+    def create(**kwargs):
+        stub.kwargs = kwargs
+        text = "```json\n" + update.model_dump_json() + "\n```"
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=text)],
+            stop_reason="end_turn",
+            stop_details=None,
+            model="claude-opus-5-5",
+            usage=SimpleNamespace(input_tokens=20, output_tokens=8),
+            _request_id="req_2",
+        )
+
+    stub.beta = SimpleNamespace(messages=SimpleNamespace(parse=parse, create=create))
+    result = ClaudeProfileAI(settings, client=stub).extract(
+        SourceDocument(mime_type="text/plain", text="CV"), None
+    )
+
+    assert result.update == update
+    assert "output_format" not in stub.kwargs
+    assert stub.kwargs["fallbacks"] == "default"
+    assert "esquema JSON" in stub.kwargs["messages"][0]["content"][-1]["text"]
