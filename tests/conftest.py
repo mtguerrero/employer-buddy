@@ -30,7 +30,12 @@ def _migrate():
 def _clean_db():
     yield
     with get_engine().begin() as conn:
-        conn.execute(text("TRUNCATE jobs, messages, users RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                "TRUNCATE llm_usage, profiles, files, jobs, messages, users "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
 
 
 @pytest.fixture

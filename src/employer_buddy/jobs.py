@@ -7,21 +7,16 @@ from datetime import timedelta
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from employer_buddy.config import Settings
-from employer_buddy.models import Job, Message, User
-from employer_buddy.whatsapp import WhatsAppClient
+from employer_buddy import conversation
+from employer_buddy.conversation import Deps
+from employer_buddy.models import Job, User
 
 log = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
 STALE_AFTER = timedelta(minutes=10)
 
-WELCOME_TEXT = (
-    "¡Hola! Recibí tu mensaje. Muy pronto podré ayudarte a configurar tu perfil "
-    "y a adaptar tu hoja de vida a cada vacante que me envíes."
-)
-
-Handler = Callable[[Session, Job, WhatsAppClient], None]
+Handler = Callable[[Session, Job, Deps], None]
 
 
 def claim_next(session: Session) -> Job | None:
@@ -48,28 +43,21 @@ def claim_next(session: Session) -> Job | None:
     return job
 
 
-def send_reply(session: Session, user: User, client: WhatsAppClient, text: str) -> None:
-    wa_id = client.send_text(user.phone, text)
-    session.add(
-        Message(user_id=user.id, wa_message_id=wa_id, direction="out", kind="text", body=text)
-    )
-
-
-def handle_message(session: Session, job: Job, client: WhatsAppClient) -> None:
+def handle_message(session: Session, job: Job, deps: Deps) -> None:
     user = session.get(User, job.user_id)
     assert user is not None
-    send_reply(session, user, client, WELCOME_TEXT)
+    conversation.handle_message(session, user, deps, job.payload["wa_message_id"])
 
 
 HANDLERS: dict[str, Handler] = {"handle_message": handle_message}
 
 
-def run_job(session: Session, job: Job, client: WhatsAppClient) -> None:
+def run_job(session: Session, job: Job, deps: Deps) -> None:
     handler = HANDLERS.get(job.kind)
     try:
         if handler is None:
             raise ValueError(f"Tipo de trabajo desconocido: {job.kind}")
-        handler(session, job, client)
+        handler(session, job, deps)
         job.status = "done"
         job.last_error = None
         session.commit()
@@ -87,10 +75,10 @@ def run_job(session: Session, job: Job, client: WhatsAppClient) -> None:
         session.commit()
 
 
-def process_one(session: Session, settings: Settings, client: WhatsAppClient) -> bool:
+def process_one(session: Session, deps: Deps) -> bool:
     """Procesa un trabajo si hay alguno. Devuelve True si procesó algo."""
     job = claim_next(session)
     if job is None:
         return False
-    run_job(session, job, client)
+    run_job(session, job, deps)
     return True
