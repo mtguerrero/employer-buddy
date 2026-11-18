@@ -7,9 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from employer_buddy.ai import AIRefusalError, AIResult, ProfileAI, SourceDocument
+from employer_buddy.config import Settings
 from employer_buddy.documents import UnsupportedFileError, to_source
 from employer_buddy.models import LlmUsage, Message, Profile, StoredFile, User
 from employer_buddy.profile_schema import ProfileData
+from employer_buddy.review import create_review_link
 from employer_buddy.whatsapp import WhatsAppClient
 
 log = logging.getLogger(__name__)
@@ -28,10 +30,19 @@ REFUSED = (
     "No pude procesar ese contenido. ¿Puedes enviarlo de nuevo, o escribirme tu experiencia "
     "en un mensaje?"
 )
-PROFILE_COMPLETE = (
-    "¡Listo! Tu perfil está completo. Pronto podrás revisarlo y ajustarlo en una página, y "
-    "después enviarme vacantes para adaptar tu hoja de vida."
+PROFILE_READY = (
+    "¡Listo! Ya tengo tu perfil. Revísalo, corrige lo que haga falta y confírmalo aquí "
+    "(el enlace se puede usar una vez y vence en {hours} horas):\n{link}"
 )
+REVIEW_LINK = (
+    "Aquí puedes revisar y ajustar tu perfil (se puede usar una vez y vence en {hours} "
+    "horas):\n{link}"
+)
+PROFILE_CONFIRMED = (
+    "¡Perfil confirmado! Muy pronto podrás enviarme vacantes para adaptar tu hoja de vida. "
+    "Si quieres revisarlo otra vez, escribe *perfil*."
+)
+REVIEW_KEYWORDS = {"perfil", "ver perfil", "revisar", "revisar perfil", "mi perfil"}
 ASK_MEDIA = {"document", "image"}
 
 
@@ -39,6 +50,7 @@ ASK_MEDIA = {"document", "image"}
 class Deps:
     whatsapp: WhatsAppClient
     ai: ProfileAI
+    settings: Settings
 
 
 def reply(session: Session, user: User, deps: Deps, text: str) -> None:
@@ -80,9 +92,14 @@ def summarize(profile: ProfileData) -> str:
     return "\n".join(lines)
 
 
-def next_step_text(questions: list[str]) -> str:
+def review_text(session: Session, user: User, deps: Deps, template: str) -> str:
+    link = create_review_link(session, deps.settings, user)
+    return template.format(link=link, hours=deps.settings.review_link_hours)
+
+
+def next_step_text(session: Session, user: User, deps: Deps, questions: list[str]) -> str:
     if not questions:
-        return PROFILE_COMPLETE
+        return review_text(session, user, deps, PROFILE_READY)
     extra = f" (me quedan {len(questions) - 1} más)" if len(questions) > 1 else ""
     return f"Para completar tu perfil necesito algunos datos{extra}.\n\n{questions[0]}"
 
@@ -110,7 +127,7 @@ def build_from_source(
     record_usage(session, user, "extract_profile", result)
     save_profile(session, user, result, profile)
     reply(session, user, deps, summarize(result.update.profile))
-    reply(session, user, deps, next_step_text(result.update.questions))
+    reply(session, user, deps, next_step_text(session, user, deps, result.update.questions))
 
 
 def handle_media(
@@ -148,8 +165,15 @@ def handle_text(
             reply(session, user, deps, WELCOME)
         return
 
+    if text.lower().strip(" .!¡¿?") in REVIEW_KEYWORDS:
+        reply(session, user, deps, review_text(session, user, deps, REVIEW_LINK))
+        return
+
     if not profile.pending_questions:
-        reply(session, user, deps, PROFILE_COMPLETE)
+        if profile.status == "confirmed":
+            reply(session, user, deps, PROFILE_CONFIRMED)
+        else:
+            reply(session, user, deps, review_text(session, user, deps, REVIEW_LINK))
         return
 
     question = profile.pending_questions[0]
@@ -161,7 +185,7 @@ def handle_text(
         return
     record_usage(session, user, "apply_answer", result)
     save_profile(session, user, result, profile)
-    reply(session, user, deps, next_step_text(result.update.questions))
+    reply(session, user, deps, next_step_text(session, user, deps, result.update.questions))
 
 
 def handle_message(session: Session, user: User, deps: Deps, wa_message_id: str) -> None:
@@ -176,3 +200,7 @@ def handle_message(session: Session, user: User, deps: Deps, wa_message_id: str)
         handle_text(session, user, deps, msg.body.strip(), profile)
     else:
         reply(session, user, deps, WELCOME if profile is None else UNSUPPORTED)
+
+
+def handle_profile_confirmed(session: Session, user: User, deps: Deps) -> None:
+    reply(session, user, deps, PROFILE_CONFIRMED)

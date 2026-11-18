@@ -18,7 +18,7 @@ def enqueue_one(client):
 
 
 def deps(settings) -> Deps:
-    return Deps(whatsapp=WhatsAppClient(settings), ai=FakeAI())
+    return Deps(whatsapp=WhatsAppClient(settings), ai=FakeAI(), settings=settings)
 
 
 @respx.mock
@@ -92,7 +92,7 @@ def test_error_no_recuperable_no_se_reintenta(client, session, settings):
     body, headers = signed(text_payload(body="Trabajo como analista de datos. " * 10))
     client.post("/webhook", content=body, headers=headers)
 
-    process_one(session, Deps(whatsapp=WhatsAppClient(settings), ai=BrokeAI()))
+    process_one(session, Deps(whatsapp=WhatsAppClient(settings), ai=BrokeAI(), settings=settings))
 
     job = session.scalar(select(Job))
     session.refresh(job)

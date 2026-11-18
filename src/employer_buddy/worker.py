@@ -17,7 +17,8 @@ log = logging.getLogger(__name__)
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = get_settings()
-    deps = Deps(whatsapp=WhatsAppClient(settings), ai=ClaudeProfileAI(settings))
+    settings.check()
+    deps = Deps(whatsapp=WhatsAppClient(settings), ai=ClaudeProfileAI(settings), settings=settings)
     make_session = get_sessionmaker()
     running = True
 

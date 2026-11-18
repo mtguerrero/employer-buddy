@@ -14,7 +14,11 @@ Fase A (configuración del perfil) en construcción:
   **perfil maestro** (solo hechos) y el bot te pregunta, una por una, por los datos que faltan.
 - Cada respuesta actualiza el perfil. Se registran los tokens usados por persona.
 
-Pendiente: página de revisión del perfil, plantilla de estilo, y la fase B (vacantes).
+- Cuando no quedan preguntas, o si escribes *perfil*, el bot envía un **enlace de un solo uso**
+  (vence en 24 horas) a la página de revisión, donde corriges y confirmas el perfil. El enlace
+  se cambia por una cookie firmada que dura 2 horas; en la base solo se guarda el hash.
+
+Pendiente: plantilla de estilo y la fase B (vacantes).
 
 ## Cómo funciona
 
@@ -24,6 +28,8 @@ Pendiente: página de revisión del perfil, plantilla de estilo, y la fase B (va
   hace la parte lenta. Reintenta con espera creciente hasta 5 veces.
 - **Claude** (`employer_buddy.ai`): extrae el perfil con salida JSON validada contra
   `profile_schema.py`. Si el modelo declina, usa el respaldo automático del servidor.
+- **Página de revisión** (`employer_buddy.web`): `/perfil` y `/api/perfil`. Configura
+  `PUBLIC_BASE_URL` y `SESSION_SECRET` fuera de desarrollo; sin ellos la app no arranca.
 - **PostgreSQL**: usuarios, mensajes, cola, archivos recibidos, perfil y consumo de tokens. Todas las tablas con datos personales llevan
   `user_id`, para poder abrir el servicio a más personas sin migrar datos.
 
