@@ -26,8 +26,9 @@ class Education(BaseModel):
 
 class Course(BaseModel):
     name: str = Field(description="Curso o certificación")
-    issuer: str | None = Field(description="Entidad que lo otorga")
+    issuer: str | None = Field(description="Entidad o plataforma que lo otorga")
     year: str | None
+    status: str | None = Field(description="Finalizado o en curso. null si no aparece.")
 
 
 class Language(BaseModel):
