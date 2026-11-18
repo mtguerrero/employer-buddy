@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 from datetime import timedelta
 
+import anthropic
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,13 @@ log = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
 STALE_AFTER = timedelta(minutes=10)
+
+# Errores que no se arreglan reintentando (clave inválida, sin saldo, solicitud mal formada).
+NON_RETRYABLE = (
+    anthropic.BadRequestError,
+    anthropic.AuthenticationError,
+    anthropic.PermissionDeniedError,
+)
 
 Handler = Callable[[Session, Job, Deps], None]
 
@@ -65,7 +73,7 @@ def run_job(session: Session, job: Job, deps: Deps) -> None:
         session.rollback()
         job = session.merge(job)
         job.last_error = f"{type(exc).__name__}: {exc}"[:2000]
-        if job.attempts >= MAX_ATTEMPTS:
+        if job.attempts >= MAX_ATTEMPTS or isinstance(exc, NON_RETRYABLE):
             job.status = "failed"
             log.exception("Trabajo %s falló definitivamente", job.id)
         else:

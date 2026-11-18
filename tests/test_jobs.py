@@ -69,3 +69,31 @@ def test_trabajo_falla_tras_maximo_de_intentos(client, session, settings):
 
     session.refresh(job)
     assert job.status == "failed"
+
+
+class BrokeAI(FakeAI):
+    def extract(self, source, current):
+        import anthropic
+        import httpx as _httpx
+
+        request = _httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        raise anthropic.BadRequestError(
+            "credit balance is too low",
+            response=_httpx.Response(400, request=request),
+            body=None,
+        )
+
+
+@respx.mock
+def test_error_no_recuperable_no_se_reintenta(client, session, settings):
+    respx.post(SEND_URL).mock(
+        return_value=httpx.Response(200, json={"messages": [{"id": "wamid.x"}]})
+    )
+    body, headers = signed(text_payload(body="Trabajo como analista de datos. " * 10))
+    client.post("/webhook", content=body, headers=headers)
+
+    process_one(session, Deps(whatsapp=WhatsAppClient(settings), ai=BrokeAI()))
+
+    job = session.scalar(select(Job))
+    session.refresh(job)
+    assert job.status == "failed" and job.attempts == 1
